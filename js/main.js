@@ -72,6 +72,41 @@ window.hideAuth = () => {
     document.getElementById('authSection').classList.add('hidden');
 };
 
+window.togglePasswordVisibility = () => {
+    const pwdInput = document.getElementById('authPassword');
+    const icon = document.getElementById('passwordIcon');
+    if (pwdInput.type === 'password') {
+        pwdInput.type = 'text';
+        icon.textContent = '🙈';
+    } else {
+        pwdInput.type = 'password';
+        icon.textContent = '👁️';
+    }
+};
+
+function getFriendlyErrorMessage(code) {
+    switch (code) {
+        case 'auth/invalid-email':
+            return "El correo electrónico no es válido.";
+        case 'auth/user-disabled':
+            return "Esta cuenta ha sido desactivada.";
+        case 'auth/user-not-found':
+            return "No existe ninguna cuenta con este correo.";
+        case 'auth/wrong-password':
+            return "La contraseña es incorrecta.";
+        case 'auth/invalid-credential':
+            return "Credenciales incorrectas. Revisa tu email y contraseña.";
+        case 'auth/email-already-in-use':
+            return "Este correo ya está registrado.";
+        case 'auth/weak-password':
+            return "La contraseña es muy débil (mínimo 6 caracteres).";
+        case 'auth/too-many-requests':
+            return "Demasiados intentos fallidos. Intenta más tarde.";
+        default:
+            return "Ocurrió un error inesperado. Intenta de nuevo.";
+    }
+}
+
 window.handleAuthSubmit = async () => {
     const email = document.getElementById('authEmail').value;
     const password = document.getElementById('authPassword').value;
@@ -92,7 +127,8 @@ window.handleAuthSubmit = async () => {
         hideAuth();
     } catch (error) {
         console.error("Error Auth:", error);
-        showAlert("❌ ERROR", error.message);
+        const friendlyMsg = getFriendlyErrorMessage(error.code);
+        showAlert("❌ ERROR", friendlyMsg);
     } finally {
         showLoading(false);
     }
@@ -190,7 +226,8 @@ function startRoomListener(roomId) {
 
             const adminDisplay = document.getElementById('adminCodeDisplay');
             if (isAdmin || isOwner) {
-                adminDisplay.innerHTML = ` | <span style="color:#ff00ff">ADMIN:</span> ${data.adminCode} <button class="copy-btn" onclick="window.copyAdminCode('${data.adminCode}')">📋</button>`;
+                const code = data.adminCode || 'NO DISPONIBLE';
+                adminDisplay.innerHTML = ` | <span style="color:#ff00ff">ADMIN:</span> ${code} <button class="copy-btn" onclick="window.copyAdminCode('${code}')">📋</button>`;
             } else {
                 adminDisplay.innerHTML = '';
             }
@@ -224,12 +261,43 @@ function startRoomListener(roomId) {
             updateLeaderboard();
             updateHistory();
             updateTournamentProgress();
+            updateModeUI(); // Sincronizar botones de modo
             
             if (document.getElementById('mainContent').classList.contains('hidden')) {
                 document.getElementById('mainContent').classList.remove('hidden');
             }
         }
     });
+}
+
+function updateModeUI() {
+    // Sincronizar botones de modo (3v3, 4v4, 5v5)
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        const val = parseInt(btn.textContent);
+        btn.classList.toggle('active', val === mode);
+    });
+
+    // Sincronizar botones de modo de juego (ARAM/GRIETA)
+    const btnAram = document.getElementById('btnAram');
+    const btnGrieta = document.getElementById('btnGrieta');
+    if (btnAram) btnAram.classList.toggle('active', gameMode === 'aram');
+    if (btnGrieta) btnGrieta.classList.toggle('active', gameMode === 'grieta');
+
+    // Visibilidad de switches según el modo
+    const aramSwitch = document.getElementById('aramRoleSwitch');
+    const grietaSwitch = document.getElementById('grietaDraftSwitch');
+    const captainsSection = document.getElementById('grietaCaptainsSection');
+    
+    if (aramSwitch) aramSwitch.classList.toggle('hidden', gameMode !== 'aram');
+    if (grietaSwitch) grietaSwitch.classList.toggle('hidden', gameMode !== 'grieta');
+    if (captainsSection) captainsSection.classList.toggle('hidden', gameMode !== 'grieta');
+
+    // Deshabilitar controles si no es admin
+    const gameModeSelector = document.getElementById('gameModeSelector');
+    const modeSelector = document.getElementById('modeSelector');
+    
+    if (gameModeSelector) gameModeSelector.classList.toggle('readonly-control', !isAdmin);
+    if (modeSelector) modeSelector.classList.toggle('readonly-control', !isAdmin);
 }
 
 function triggerRevealFanfare() {
@@ -588,8 +656,11 @@ function updateLeaderboard() {
 }
 
 function updateTournamentProgress() {
-    const el = document.getElementById('tournamentProgress');
-    el.textContent = `Partidas de esta liga: ${totalMatchesPlayed}`;
+    const landing = document.getElementById('tournamentProgressLanding');
+    const room = document.getElementById('roomTournamentProgress');
+    const text = `Partidas de esta liga: ${totalMatchesPlayed}`;
+    if (landing) landing.textContent = text;
+    if (room) room.textContent = text;
 }
 
 function updateHistory() {
@@ -677,17 +748,12 @@ window.renderPlayerPool = renderPlayerPool; // <--- Y ESTA
 window.setMode = (e, m) => {
     if (!isAdmin) return;
     mode = m;
-    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', parseInt(b.textContent) === m));
-    renderPlayerPool();
+    saveToFirebase(false);
 };
 window.setGameMode = (e, m) => {
     if (!isAdmin) return;
     gameMode = m;
-    document.querySelectorAll('.game-mode-btn').forEach(b => b.classList.remove('active'));
-    e.target.classList.add('active');
-    document.getElementById('aramRoleSwitch').classList.toggle('hidden', m !== 'aram');
-    document.getElementById('grietaDraftSwitch').classList.toggle('hidden', m !== 'grieta');
-    document.getElementById('grietaCaptainsSection').classList.toggle('hidden', m !== 'grieta');
+    saveToFirebase(false);
 };
 window.confirmResetTournament = () => {
     if (!isAdmin) return;

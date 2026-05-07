@@ -79,7 +79,7 @@
         <header>
             <h1>⚔️ SCRIMS ANTIVENEKOS ⚔️</h1>
             <div class="subtitle">SISTEMA PARA TROLLS</div>
-            <div class="tournament-progress" id="tournamentProgress">Sin torneo activo</div>
+            <div class="tournament-progress" id="tournamentProgressLanding">Sin torneo activo</div>
         </header>
 
         <!-- PANTALLA DE INICIO (LANDING PAGE) -->
@@ -125,7 +125,12 @@
                     </div>
                     <div class="input-group">
                         <label>Contraseña</label>
-                        <input type="password" id="authPassword" placeholder="••••••••">
+                        <div class="password-wrapper">
+                            <input type="password" id="authPassword" placeholder="••••••••">
+                            <button type="button" class="toggle-password" onclick="window.togglePasswordVisibility()">
+                                <span id="passwordIcon">👁️</span>
+                            </button>
+                        </div>
                     </div>
                     <button class="btn" id="authSubmitBtn" onclick="window.handleAuthSubmit()">CONTINUAR</button>
                     <p class="auth-switch" id="authSwitchText">
@@ -147,15 +152,15 @@
                 </div>
                 <h1>⚔️ SCRIMS ANTIVENEKOS ⚔️</h1>
                 <div class="subtitle" id="roomTitle">SISTEMA PARA TROLLS</div>
-                <div class="tournament-progress" id="tournamentProgress">Sin torneo activo</div>
+                <div class="tournament-progress" id="roomTournamentProgress">Sin torneo activo</div>
             </header>
 
-            <!-- SELECTOR DE MODO DE JUEGO (Solo visible para Admin) -->
-            <div class="game-mode-selector admin-only">
-                <button class="game-mode-btn" onclick="setGameMode(event, 'aram')">
+            <!-- SELECTOR DE MODO DE JUEGO (Visible para todos, pero solo admin edita) -->
+            <div class="game-mode-selector" id="gameModeSelector">
+                <button class="game-mode-btn" id="btnAram" onclick="setGameMode(event, 'aram')">
                     🎯 ARAM
                 </button>
-                <button class="game-mode-btn" onclick="setGameMode(event, 'grieta')">
+                <button class="game-mode-btn" id="btnGrieta" onclick="setGameMode(event, 'grieta')">
                     🗺️ GRIETA DEL INVOCADOR
                 </button>
             </div>
@@ -171,11 +176,11 @@
                             <button class="btn btn-small" onclick="addNewPlayer()">+ GUARDAR</button>
                         </div>
 
-                        <!-- Selector de modo (Solo visible para Admin) -->
-                        <div class="mode-selector admin-only">
-                            <button class="mode-btn active" onclick="setMode(event, 3)">3v3</button>
-                            <button class="mode-btn" onclick="setMode(event, 4)">4v4</button>
-                            <button class="mode-btn" onclick="setMode(event, 5)">5v5</button>
+                        <!-- Selector de modo (Visible para todos, pero solo admin edita) -->
+                        <div class="mode-selector" id="modeSelector">
+                            <button class="mode-btn" id="btn3v3" onclick="setMode(event, 3)">3v3</button>
+                            <button class="mode-btn" id="btn4v4" onclick="setMode(event, 4)">4v4</button>
+                            <button class="mode-btn" id="btn5v5" onclick="setMode(event, 5)">5v5</button>
                         </div>
 
                         <!-- SWITCH SELECTOR DE ROL (Solo ARAM) - (Solo visible para Admin) -->
