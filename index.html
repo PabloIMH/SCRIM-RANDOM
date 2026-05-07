@@ -152,6 +152,7 @@
                 </div>
                 <h1>⚔️ SCRIMS ANTIVENEKOS ⚔️</h1>
                 <div class="subtitle" id="roomTitle">SISTEMA PARA TROLLS</div>
+                <div class="modality-summary not-admin-only" id="modalitySummary">GRIETA DEL INVOCADOR 5V5</div>
                 <div class="tournament-progress" id="roomTournamentProgress">Sin torneo activo</div>
             </header>
 
@@ -183,7 +184,7 @@
                             <button class="mode-btn" id="btn5v5" onclick="setMode(event, 5)">5v5</button>
                         </div>
 
-                        <!-- SWITCH SELECTOR DE ROL (Solo ARAM) - (Solo visible para Admin) -->
+                        <!-- SWITCH SELECTOR DE ROL (Solo ARAM) -->
                         <div class="switch-container admin-only" id="aramRoleSwitch">
                             <span class="switch-label">
                                 🎲 Selector de Rol (Todos mismo rol)
@@ -191,12 +192,12 @@
                                     data-tooltip="Todos los jugadores juegan el mismo rol aleatorio (TOP/JUNGLA/MID/ADC/SUPP).">?</span>
                             </span>
                             <label class="switch">
-                                <input type="checkbox" id="aramRoleSelectorToggle">
+                                <input type="checkbox" id="aramRoleSelectorToggle" onchange="syncSettings()">
                                 <span class="slider"></span>
                             </label>
                         </div>
 
-                        <!-- SWITCH DRAFT ALEATORIO (Solo Grieta) - (Solo visible para Admin) -->
+                        <!-- SWITCH DRAFT ALEATORIO (Solo Grieta) -->
                         <div class="switch-container hidden admin-only" id="grietaDraftSwitch">
                             <span class="switch-label">
                                 🎯 Draft Aleatorio (Cada uno rol distinto)
@@ -204,12 +205,12 @@
                                     data-tooltip="Cada jugador recibe un rol distinto al azar (TOP/JUNGLA/MID/ADC/SUPP).">?</span>
                             </span>
                             <label class="switch">
-                                <input type="checkbox" id="grietaDraftToggle">
+                                <input type="checkbox" id="grietaDraftToggle" onchange="syncSettings()">
                                 <span class="slider"></span>
                             </label>
                         </div>
 
-                        <!-- MODO CAPITANES (Solo Grieta) - (Solo visible para Admin) -->
+                        <!-- MODO CAPITANES (Solo Grieta) -->
                         <div class="hidden admin-only" id="grietaCaptainsSection">
                             <div class="switch-container">
                                 <span class="switch-label">
@@ -218,7 +219,7 @@
                                         data-tooltip="Dos capitanes se turnan para elegir a sus compañeros de equipo desde el lobby.">?</span>
                                 </span>
                                 <label class="switch">
-                                    <input type="checkbox" id="captainsModeToggle" onchange="toggleCaptainsMode()">
+                                    <input type="checkbox" id="captainsModeToggle" onchange="toggleCaptainsMode(); syncSettings()">
                                     <span class="slider"></span>
                                 </label>
                             </div>
@@ -246,15 +247,17 @@
                             </div>
                         </div>
 
-                        <div class="section-header">
-                            <h3 class="section-title">👥 JUGADORES GUARDADOS</h3>
-                            <div class="search-wrapper">
-                                <span class="search-icon">🔍</span>
-                                <input type="text" id="searchSaved" placeholder="Buscar..." oninput="renderAllPlayers()">
+                        <div class="admin-only">
+                            <div class="section-header">
+                                <h3 class="section-title">👥 JUGADORES GUARDADOS</h3>
+                                <div class="search-wrapper">
+                                    <span class="search-icon">🔍</span>
+                                    <input type="text" id="searchSaved" placeholder="Buscar..." oninput="renderAllPlayers()">
+                                </div>
                             </div>
-                        </div>
-                        <div class="all-players" id="allPlayers">
-                            <!-- Saved players will appear here -->
+                            <div class="all-players" id="allPlayers">
+                                <!-- Saved players will appear here -->
+                            </div>
                         </div>
 
                         <div class="section-header" style="margin-top: 30px;">

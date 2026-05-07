@@ -29,6 +29,9 @@ let totalMatchesPlayed = 0;
 let captainsMode = false;
 let currentRole = null;
 const ROLES = ['TOP', 'JUNGLA', 'MID', 'ADC', 'SUPP'];
+let aramRoleSelector = false;
+let grietaDraft = false;
+let draftActive = false;
 
 // Room State
 let currentRoomId = null;
@@ -217,7 +220,35 @@ function startRoomListener(roomId) {
             selectedPlayers = data.selectedPlayers || [];
             mode = data.mode || 3;
             gameMode = data.gameMode || 'aram';
+            captainsMode = data.captainsMode || false;
+            aramRoleSelector = data.aramRoleSelector || false;
+            grietaDraft = data.grietaDraft || false;
+            draftActive = data.draftActive || false;
             
+            // Sincronizar checkboxes (evitar bucles infinitos con checks silenciosos)
+            const chkCaptains = document.getElementById('captainsModeToggle');
+            const chkAramRole = document.getElementById('aramRoleSelectorToggle');
+            const chkGrietaDraft = document.getElementById('grietaDraftToggle');
+            if (chkCaptains) chkCaptains.checked = captainsMode;
+            if (chkAramRole) chkAramRole.checked = aramRoleSelector;
+            if (chkGrietaDraft) chkGrietaDraft.checked = grietaDraft;
+
+            // Sincronizar Modo Capitanes "En Vivo"
+            if (draftActive && data.currentDraft) {
+                captains = data.currentDraft.captains;
+                currentTurn = data.currentDraft.currentTurn;
+                availableForCaptains = data.currentDraft.availablePlayers;
+                blueTeam = data.currentDraft.blueTeam;
+                redTeam = data.currentDraft.redTeam;
+                
+                document.getElementById('captainOverlay').classList.add('show');
+                document.getElementById('captainInterface').classList.remove('hidden');
+                renderCaptainInterface();
+            } else {
+                document.getElementById('captainOverlay').classList.remove('show');
+                document.getElementById('captainInterface').classList.add('hidden');
+            }
+
             // Mostrar código admin si es admin o dueño
             const user = auth.currentUser;
             const isOwner = user && data.ownerId === user.uid;
@@ -236,6 +267,9 @@ function startRoomListener(roomId) {
             document.querySelectorAll('.admin-only').forEach(el => {
                 el.classList.toggle('hidden', !isAdmin);
             });
+            document.querySelectorAll('.not-admin-only').forEach(el => {
+                el.classList.toggle('hidden', isAdmin);
+            });
 
             // Si hay un equipo generado actualmente
             if (data.currentMatch) {
@@ -251,7 +285,7 @@ function startRoomListener(roomId) {
                 } else {
                     document.getElementById('teamsSection').classList.remove('hidden');
                 }
-            } else {
+            } else if (!draftActive) { // No ocultar si el draft está activo
                 document.getElementById('teamsSection').classList.add('hidden');
                 lastMatchTimestamp = null;
             }
@@ -295,9 +329,22 @@ function updateModeUI() {
     // Deshabilitar controles si no es admin
     const gameModeSelector = document.getElementById('gameModeSelector');
     const modeSelector = document.getElementById('modeSelector');
+    const toggles = ['captainsModeToggle', 'aramRoleSelectorToggle', 'grietaDraftToggle'];
     
     if (gameModeSelector) gameModeSelector.classList.toggle('readonly-control', !isAdmin);
     if (modeSelector) modeSelector.classList.toggle('readonly-control', !isAdmin);
+    toggles.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !isAdmin;
+    });
+
+    // Actualizar Resumen de Modalidad
+    const summary = document.getElementById('modalitySummary');
+    if (summary) {
+        const gmText = gameMode === 'aram' ? 'ARAM' : 'GRIETA';
+        const capText = captainsMode ? ' | CAPITANES' : '';
+        summary.textContent = `${gmText} ${mode}V${mode}${capText}`;
+    }
 }
 
 function triggerRevealFanfare() {
@@ -360,13 +407,24 @@ async function saveToFirebase(showLoader = true) {
     try {
         const roomRef = doc(db, "rooms", currentRoomId);
         await updateDoc(roomRef, {
-            allPlayers: allPlayers,
-            selectedPlayers: selectedPlayers,
-            mode: mode,
-            gameMode: gameMode,
-            tournamentPlayers: tournamentPlayers,
-            tournamentHistory: tournamentHistory,
-            totalMatchesPlayed: totalMatchesPlayed,
+            allPlayers,
+            selectedPlayers,
+            mode,
+            gameMode,
+            captainsMode,
+            aramRoleSelector,
+            grietaDraft,
+            draftActive,
+            currentDraft: draftActive ? {
+                captains,
+                currentTurn,
+                availablePlayers: availableForCaptains,
+                blueTeam,
+                redTeam
+            } : null,
+            tournamentPlayers,
+            tournamentHistory,
+            totalMatchesPlayed,
             lastUpdate: new Date().toISOString()
         });
     } catch (error) {
@@ -763,6 +821,14 @@ window.confirmResetTournament = () => {
     ]);
 };
 
+window.syncSettings = () => {
+    if (!isAdmin) return;
+    captainsMode = document.getElementById('captainsModeToggle').checked;
+    aramRoleSelector = document.getElementById('aramRoleSelectorToggle').checked;
+    grietaDraft = document.getElementById('grietaDraftToggle').checked;
+    saveToFirebase(false);
+};
+
 // --- MODO CAPITANES ---
 let captains = { blue: '', red: '' };
 let currentTurn = 'blue';
@@ -799,27 +865,40 @@ window.startCaptainSelection = () => {
     redTeam = [captains.red];
     availableForCaptains = selectedPlayers.filter(p => p !== captains.blue && p !== captains.red);
     currentTurn = 'blue';
+    draftActive = true;
+    
     document.getElementById('captainOverlay').classList.add('show');
     document.getElementById('captainInterface').classList.remove('hidden');
     renderCaptainInterface();
+    saveToFirebase(false);
 };
 
 function renderCaptainInterface() {
     const turnIndicator = document.getElementById('turnIndicator');
     const captainName = document.getElementById('currentCaptainName');
-    turnIndicator.className = `turn-indicator ${currentTurn}`;
-    captainName.textContent = currentTurn === 'blue' ? captains.blue : captains.red;
+    if (turnIndicator && captainName) {
+        turnIndicator.className = `turn-indicator ${currentTurn}`;
+        captainName.textContent = currentTurn === 'blue' ? captains.blue : captains.red;
+    }
 
-    document.getElementById('availablePlayers').innerHTML = availableForCaptains.map(p => `
-        <div class="selectable-player" onclick="window.pickPlayer('${p}')">${p}</div>
-    `).join('');
+    const availableContainer = document.getElementById('availablePlayers');
+    if (availableContainer) {
+        availableContainer.innerHTML = availableForCaptains.map(p => `
+            <div class="selectable-player" ${isAdmin ? `onclick="window.pickPlayer('${p}')"` : ''}>${p}</div>
+        `).join('');
+    }
 
-    document.getElementById('blueCaptainTeam').innerHTML = blueTeam.map((p, i) => `<li>${p}${i === 0 ? ' <span class="captain-badge">CAP</span>' : ''}</li>`).join('');
-    document.getElementById('redCaptainTeam').innerHTML = redTeam.map((p, i) => `<li>${p}${i === 0 ? ' <span class="captain-badge">CAP</span>' : ''}</li>`).join('');
-    document.getElementById('finishSelectionBtn').classList.toggle('hidden', availableForCaptains.length > 0);
+    const blueList = document.getElementById('blueCaptainTeam');
+    const redList = document.getElementById('redCaptainTeam');
+    if (blueList) blueList.innerHTML = blueTeam.map((p, i) => `<li>${p}${i === 0 ? ' <span class="captain-badge">CAP</span>' : ''}</li>`).join('');
+    if (redList) redList.innerHTML = redTeam.map((p, i) => `<li>${p}${i === 0 ? ' <span class="captain-badge">CAP</span>' : ''}</li>`).join('');
+    
+    const finishBtn = document.getElementById('finishSelectionBtn');
+    if (finishBtn) finishBtn.classList.toggle('hidden', availableForCaptains.length > 0 || !isAdmin);
 }
 
 window.pickPlayer = (nick) => {
+    if (!isAdmin) return;
     if (currentTurn === 'blue') {
         blueTeam.push(nick);
         currentTurn = 'red';
@@ -829,14 +908,17 @@ window.pickPlayer = (nick) => {
     }
     availableForCaptains = availableForCaptains.filter(p => p !== nick);
     renderCaptainInterface();
+    saveToFirebase(false);
 };
 
 window.finishCaptainSelection = () => {
+    if (!isAdmin) return;
+    draftActive = false;
     document.getElementById('captainOverlay').classList.remove('show');
     document.getElementById('captainInterface').classList.add('hidden');
     updateTeamsUI();
     document.getElementById('teamsSection').classList.remove('hidden');
-    saveTeamsToFirebase();
+    saveTeamsToFirebase(); // Esto guarda el currentMatch y pone draftActive: false
 };
 
 window.copyAdminCode = (code) => {
