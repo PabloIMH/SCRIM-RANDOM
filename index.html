@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCRIMS ANTIVENEKOS 3.0</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <!-- TOOLTIP GLOBAL -->
+    <div id="helpTooltip" class="help-tooltip"></div>
+
+    <!-- LOADER GLOBAL PARA OPERACIONES LENTAS -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-icon">🪰</div>
+        <div class="loading-spinner"></div>
+        <div class="loading-title">Guardando datos</div>
+        <div class="loading-message" id="loadingMessage">
+            Esto puede tomar un momento...
+        </div>
+    </div>
+
+    <div class="alert-overlay" id="alertOverlay"></div>
+    <div class="custom-alert" id="customAlert">
+        <div class="alert-title" id="alertTitle">Título</div>
+        <div class="alert-message" id="alertMessage">Mensaje</div>
+        <div class="alert-buttons" id="alertButtons"></div>
+    </div>
+
+    <!-- REVEAL FANFARE OVERLAY -->
+    <div id="revealOverlay" class="reveal-overlay hidden">
+        <div class="reveal-content">
+            <div class="reveal-sparkles"></div>
+            <h2 class="reveal-subtitle">LAS ARENAS SE AGITAN...</h2>
+            <h1 class="reveal-title" id="revealText">¡PREPARANDO BATALLA!</h1>
+            <div class="reveal-decoration">⚔️</div>
+        </div>
+    </div>
+
+    <!-- INTERFAZ DE SELECCIÓN DE CAPITANES -->
+    <div class="alert-overlay" id="captainOverlay"></div>
+    <div class="captain-selection-interface hidden" id="captainInterface">
+        <h2 class="captain-interface-title">👑 SELECCIÓN POR CAPITANES</h2>
+
+        <div class="turn-indicator" id="turnIndicator">
+            Turno de: <strong id="currentCaptainName">Capitán Azul</strong>
+        </div>
+
+        <h3 class="section-title" style="text-align: center;">JUGADORES DISPONIBLES</h3>
+        <div class="available-players-grid" id="availablePlayers">
+            <!-- Se llenarán dinámicamente -->
+        </div>
+
+        <div class="captain-teams-display">
+            <div class="captain-team-preview blue">
+                <h3>💙 EQUIPO AZUL</h3>
+                <ul class="captain-team-list" id="blueCaptainTeam">
+                    <!-- Se llenará dinámicamente -->
+                </ul>
+            </div>
+
+            <div class="captain-team-preview red">
+                <h3>❤️ EQUIPO ROJO</h3>
+                <ul class="captain-team-list" id="redCaptainTeam">
+                    <!-- Se llenará dinámicamente -->
+                </ul>
+            </div>
+        </div>
+
+        <button class="btn btn-success finish-selection-btn hidden" id="finishSelectionBtn"
+            onclick="finishCaptainSelection()">
+            ✅ FINALIZAR SELECCIÓN
+        </button>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>⚔️ SCRIMS ANTIVENEKOS ⚔️</h1>
+            <div class="subtitle">SISTEMA PARA TROLLS</div>
+            <div class="tournament-progress" id="tournamentProgress">Sin torneo activo</div>
+        </header>
+
+        <!-- PANTALLA DE INICIO (LANDING PAGE) -->
+        <div id="landingPage" class="landing-page">
+            <div class="landing-content">
+                <h1 class="glitch" data-text="SCRIMS ANTIVENEKOS">SCRIMS ANTIVENEKOS</h1>
+                <p class="landing-subtitle">LA ARENA DEFINITIVA PARA TUS SCRIMS DE LEAGUE OF LEGENDS</p>
+
+                <div class="landing-cards">
+                    <div class="landing-card">
+                        <h3>🤝 UNIRSE A UNA SCRIM</h3>
+                        <p>Ingresa el código que te envió tu amigo para ver los equipos y la liga en tiempo real.</p>
+                        <div class="input-group">
+                            <input type="text" id="joinRoomInput" placeholder="CÓDIGO (Ej: A7B2X)">
+                            <button class="btn btn-small" onclick="window.joinRoom()">UNIRSE</button>
+                        </div>
+                    </div>
+
+                    <div class="landing-card highlight">
+                        <h3>👑 CREA TU PROPIA ARENA</h3>
+                        <p>Gestiona tus propios jugadores, genera equipos equilibrados y lleva el historial de
+                            victorias.</p>
+                        <button class="btn" onclick="window.showAuth('register')">CREAR MI SCRIM</button>
+                    </div>
+                </div>
+
+                <div class="landing-footer">
+                    <button class="link-btn" onclick="window.showAuth('login')">Ya tengo una sala (Iniciar
+                        Sesión)</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN DE AUTENTICACIÓN (LOGIN/REGISTRO) -->
+        <div id="authSection" class="auth-overlay hidden">
+            <div class="auth-card">
+                <button class="close-auth" onclick="window.hideAuth()">×</button>
+                <h2 id="authTitle">INICIAR SESIÓN</h2>
+                <div class="auth-form">
+                    <div class="input-group">
+                        <label>Email</label>
+                        <input type="email" id="authEmail" placeholder="tu@email.com">
+                    </div>
+                    <div class="input-group">
+                        <label>Contraseña</label>
+                        <input type="password" id="authPassword" placeholder="••••••••">
+                    </div>
+                    <button class="btn" id="authSubmitBtn" onclick="window.handleAuthSubmit()">CONTINUAR</button>
+                    <p class="auth-switch" id="authSwitchText">
+                        ¿No tienes cuenta? <span onclick="window.showAuth('register')">Regístrate</span>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="container hidden" id="roomContent">
+            <header>
+                <div class="top-nav">
+                    <div class="room-info">
+                        SALA: <span id="displayRoomId">------</span>
+                        <button class="copy-btn" onclick="window.copyRoomCode()" title="Copiar código de sala">📋</button>
+                        <span id="adminCodeDisplay"></span>
+                    </div>
+                    <button class="logout-btn" onclick="window.logout()">SALIR</button>
+                </div>
+                <h1>⚔️ SCRIMS ANTIVENEKOS ⚔️</h1>
+                <div class="subtitle" id="roomTitle">SISTEMA PARA TROLLS</div>
+                <div class="tournament-progress" id="tournamentProgress">Sin torneo activo</div>
+            </header>
+
+            <!-- SELECTOR DE MODO DE JUEGO (Solo visible para Admin) -->
+            <div class="game-mode-selector admin-only">
+                <button class="game-mode-btn" onclick="setGameMode(event, 'aram')">
+                    🎯 ARAM
+                </button>
+                <button class="game-mode-btn" onclick="setGameMode(event, 'grieta')">
+                    🗺️ GRIETA DEL INVOCADOR
+                </button>
+            </div>
+
+            <div id="mainContent" class="hidden">
+                <div class="main-grid">
+                    <div class="card">
+                        <h2 class="card-title">🎮 LOBBY</h2>
+
+                        <!-- Agregar nuevo jugador (Solo visible para Admin) -->
+                        <div class="input-group admin-only">
+                            <input type="text" id="playerInput" placeholder="Agregar nuevo jugador...">
+                            <button class="btn btn-small" onclick="addNewPlayer()">+ GUARDAR</button>
+                        </div>
+
+                        <!-- Selector de modo (Solo visible para Admin) -->
+                        <div class="mode-selector admin-only">
+                            <button class="mode-btn active" onclick="setMode(event, 3)">3v3</button>
+                            <button class="mode-btn" onclick="setMode(event, 4)">4v4</button>
+                            <button class="mode-btn" onclick="setMode(event, 5)">5v5</button>
+                        </div>
+
+                        <!-- SWITCH SELECTOR DE ROL (Solo ARAM) - (Solo visible para Admin) -->
+                        <div class="switch-container admin-only" id="aramRoleSwitch">
+                            <span class="switch-label">
+                                🎲 Selector de Rol (Todos mismo rol)
+                                <span class="help-icon"
+                                    data-tooltip="Todos los jugadores juegan el mismo rol aleatorio (TOP/JUNGLA/MID/ADC/SUPP).">?</span>
+                            </span>
+                            <label class="switch">
+                                <input type="checkbox" id="aramRoleSelectorToggle">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                        <!-- SWITCH DRAFT ALEATORIO (Solo Grieta) - (Solo visible para Admin) -->
+                        <div class="switch-container hidden admin-only" id="grietaDraftSwitch">
+                            <span class="switch-label">
+                                🎯 Draft Aleatorio (Cada uno rol distinto)
+                                <span class="help-icon"
+                                    data-tooltip="Cada jugador recibe un rol distinto al azar (TOP/JUNGLA/MID/ADC/SUPP).">?</span>
+                            </span>
+                            <label class="switch">
+                                <input type="checkbox" id="grietaDraftToggle">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                        <!-- MODO CAPITANES (Solo Grieta) - (Solo visible para Admin) -->
+                        <div class="hidden admin-only" id="grietaCaptainsSection">
+                            <div class="switch-container">
+                                <span class="switch-label">
+                                    👑 Modo Capitanes
+                                    <span class="help-icon"
+                                        data-tooltip="Dos capitanes se turnan para elegir a sus compañeros de equipo desde el lobby.">?</span>
+                                </span>
+                                <label class="switch">
+                                    <input type="checkbox" id="captainsModeToggle" onchange="toggleCaptainsMode()">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="captains-mode hidden" id="captainsSelection">
+                                <h3 class="section-title">👑 SELECCIONA LOS CAPITANES</h3>
+                                <div class="captains-selection">
+                                    <div class="captain-card blue">
+                                        <div class="captain-name">CAPITÁN AZUL 💙</div>
+                                        <div class="captain-select-wrapper blue">
+                                            <select id="blueCaptainSelect" onchange="selectCaptain('blue')">
+                                                <option value="">Seleccionar...</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="captain-card red">
+                                        <div class="captain-name">CAPITÁN ROJO ❤️</div>
+                                        <div class="captain-select-wrapper red">
+                                            <select id="redCaptainSelect" onchange="selectCaptain('red')">
+                                                <option value="">Seleccionar...</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="section-header">
+                            <h3 class="section-title">👥 JUGADORES GUARDADOS</h3>
+                            <div class="search-wrapper">
+                                <span class="search-icon">🔍</span>
+                                <input type="text" id="searchSaved" placeholder="Buscar..." oninput="renderAllPlayers()">
+                            </div>
+                        </div>
+                        <div class="all-players" id="allPlayers">
+                            <!-- Saved players will appear here -->
+                        </div>
+
+                        <div class="section-header" style="margin-top: 30px;">
+                            <h3 class="section-title">
+                                ⚔️ LOBBY ACTUAL <span id="lobbyCounter" style="font-size: 0.9rem; color: #00ffff; margin-left: 10px;"></span>
+                            </h3>
+                            <div class="search-wrapper">
+                                <span class="search-icon">🔍</span>
+                                <input type="text" id="searchLobby" placeholder="Buscar..." oninput="renderPlayerPool()">
+                            </div>
+                        </div>
+                        <div class="player-pool" id="playerPool">
+                            <div style="color: rgba(255,255,255,0.3); width: 100%; text-align: center;">
+                                Selecciona jugadores arriba...
+                            </div>
+                        </div>
+
+                        <button class="btn admin-only" style="width: 100%; margin-top: 20px;" onclick="generateTeams()">
+                            🎲 GENERAR EQUIPOS
+                        </button>
+
+                        <button class="btn btn-warning admin-only" style="width: 100%; margin-top: 10px;"
+                            onclick="confirmResetTournament()">
+                            📅 CERRAR LIGA
+                        </button>
+                    </div>
+
+                    <div class="card">
+                        <h2 class="card-title">🏆 LIGA </h2>
+                        <table class="leaderboard-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>JUGADOR</th>
+                                    <th>🏆 VICTORIAS</th>
+                                    <th>🎮 PARTIDAS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leaderboardBody">
+                                <tr>
+                                    <td colspan="4" style="text-align: center; color: rgba(255,255,255,0.3);">Sin
+                                        jugadores
+                                        en
+                                        la liga</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="teamsSection" class="hidden">
+                    <div class="teams-section-header">
+                        <h2 class="card-title" style="margin-bottom: 0; font-size: 1.4rem;">⚔️ PARTIDA EN CURSO</h2>
+                        <button class="cancel-match-btn admin-only" onclick="window.cancelMatch()" title="Cancelar esta partida">
+                            ×
+                        </button>
+                    </div>
+
+                    <!-- ANUNCIO DE ROL (Solo si está activo en ARAM) -->
+                    <div class="role-announcement hidden" id="roleAnnouncement">
+                        <div class="role-announcement-title">🎲 ROL DE ESTA PARTIDA:</div>
+                        <div class="role-announcement-role" id="announcedRole">TOP</div>
+                    </div>
+
+                    <div class="teams-container">
+                        <div class="team blue">
+                            <h3 class="team-title">💙 EQUIPO AZUL</h3>
+                            <ul class="team-players" id="blueTeam"></ul>
+                        </div>
+
+                        <div class="team red">
+                            <h3 class="team-title">❤️ EQUIPO ROJO</h3>
+                            <ul class="team-players" id="redTeam"></ul>
+                        </div>
+                    </div>
+
+                    <div class="winner-btns admin-only">
+                        <button class="btn btn-success" onclick="declareWinner('blue')">
+                            GANÓ AZUL 💙
+                        </button>
+                        <button class="btn btn-danger" onclick="declareWinner('red')">
+                            GANÓ ROJO ❤️
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Historial de Torneos -->
+                <div class="card history-section">
+                    <h2 class="card-title">📜 HISTORIAL DE TORNEOS</h2>
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>FECHA</th>
+                                <th>MODO</th>
+                                <th>🥇 PRIMERO</th>
+                                <th>🥈 SEGUNDO</th>
+                                <th>🥉 TERCERO</th>
+                                <th>PARTIDAS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyBody">
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: rgba(255,255,255,0.3);">Sin torneos
+                                    registrados</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <script type="module" src="js/main.js"></script>
+</body>
+
+</html>
