@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, where, getDocs, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, where, getDocs, limit, increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -33,6 +33,10 @@ let aramRoleSelector = false;
 let grietaDraft = false;
 let draftActive = false;
 
+let currentLvpTeam = null;
+let currentLvpSessionId = null;
+let currentLvpVotes = {};
+
 // Room State
 let currentRoomId = null;
 let isAdmin = false;
@@ -52,7 +56,7 @@ onAuthStateChanged(auth, async (user) => {
 async function checkUserRoom(user) {
     const q = query(collection(db, "rooms"), where("ownerId", "==", user.uid), limit(1));
     const querySnapshot = await getDocs(q);
-    
+
     if (!querySnapshot.empty) {
         const roomDoc = querySnapshot.docs[0];
         enterRoom(roomDoc.id, true);
@@ -65,7 +69,7 @@ window.showAuth = (type) => {
     authMode = type;
     document.getElementById('authTitle').textContent = type === 'login' ? 'INICIAR SESIÓN' : 'CREAR CUENTA';
     document.getElementById('authSubmitBtn').textContent = type === 'login' ? 'ENTRAR' : 'REGISTRARME Y CREAR SALA';
-    document.getElementById('authSwitchText').innerHTML = type === 'login' 
+    document.getElementById('authSwitchText').innerHTML = type === 'login'
         ? '¿No tienes cuenta? <span onclick="window.showAuth(\'register\')">Regístrate</span>'
         : '¿Ya tienes cuenta? <span onclick="window.showAuth(\'login\')">Inicia Sesión</span>';
     document.getElementById('authSection').classList.remove('hidden');
@@ -166,7 +170,7 @@ window.joinRoom = async () => {
         // 1. Intentar entrar como Dueño/Lector (por ID de sala)
         const roomRef = doc(db, "rooms", code);
         const roomSnap = await getDoc(roomRef);
-        
+
         if (roomSnap.exists()) {
             enterRoom(code, false); // Entra como lector por defecto
             return;
@@ -175,7 +179,7 @@ window.joinRoom = async () => {
         // 2. Intentar entrar como Administrador (por Código Admin)
         const q = query(collection(db, "rooms"), where("adminCode", "==", code), limit(1));
         const querySnapshot = await getDocs(q);
-        
+
         if (!querySnapshot.empty) {
             const roomDoc = querySnapshot.docs[0];
             enterRoom(roomDoc.id, true); // Entra como admin
@@ -193,13 +197,13 @@ window.joinRoom = async () => {
 function enterRoom(roomId, asAdmin) {
     currentRoomId = roomId;
     isAdmin = asAdmin;
-    
+
     document.getElementById('landingPage').classList.add('hidden');
     document.getElementById('roomContent').classList.remove('hidden');
     document.getElementById('displayRoomId').textContent = roomId;
-    
+
     startRoomListener(roomId);
-    
+
     const url = new URL(window.location);
     url.searchParams.set('room', roomId);
     window.history.pushState({}, '', url);
@@ -209,7 +213,7 @@ let lastMatchTimestamp = null;
 
 function startRoomListener(roomId) {
     if (unsubscribeRoom) unsubscribeRoom();
-    
+
     unsubscribeRoom = onSnapshot(doc(db, "rooms", roomId), (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data();
@@ -224,7 +228,21 @@ function startRoomListener(roomId) {
             aramRoleSelector = data.aramRoleSelector || false;
             grietaDraft = data.grietaDraft || false;
             draftActive = data.draftActive || false;
-            
+
+            // Mostrar modal de LVP en vivo para todos
+            if (data.lvpVotingActive) {
+                currentLvpTeam = data.lvpTeam;
+                currentLvpSessionId = data.lvpSessionId;
+                currentLvpVotes = data.lvpVotes || {};
+                renderLvpLiveModal();
+            } else {
+                const existingModal = document.getElementById('lvpLiveModal');
+                if (existingModal) existingModal.remove();
+                currentLvpTeam = null;
+                currentLvpSessionId = null;
+                currentLvpVotes = {};
+            }
+
             // Sincronizar checkboxes (evitar bucles infinitos con checks silenciosos)
             const chkCaptains = document.getElementById('captainsModeToggle');
             const chkAramRole = document.getElementById('aramRoleSelectorToggle');
@@ -240,7 +258,7 @@ function startRoomListener(roomId) {
                 availableForCaptains = data.currentDraft.availablePlayers;
                 blueTeam = data.currentDraft.blueTeam;
                 redTeam = data.currentDraft.redTeam;
-                
+
                 document.getElementById('captainOverlay').classList.add('show');
                 document.getElementById('captainInterface').classList.remove('hidden');
                 renderCaptainInterface();
@@ -252,15 +270,17 @@ function startRoomListener(roomId) {
             // Mostrar código admin si es admin o dueño
             const user = auth.currentUser;
             const isOwner = user && data.ownerId === user.uid;
-            
+
             if (isOwner) isAdmin = true;
 
             const adminDisplay = document.getElementById('adminCodeDisplay');
             if (isAdmin || isOwner) {
                 const code = data.adminCode || 'NO DISPONIBLE';
                 adminDisplay.innerHTML = ` | <span style="color:#ff00ff">ADMIN:</span> ${code} <button class="copy-btn" onclick="window.copyAdminCode('${code}')">📋</button>`;
+                adminDisplay.style.display = '';
             } else {
                 adminDisplay.innerHTML = '';
+                adminDisplay.style.display = 'none';
             }
 
             // Aplicar visibilidad de admin
@@ -274,10 +294,18 @@ function startRoomListener(roomId) {
             // Si hay un equipo generado actualmente
             if (data.currentMatch) {
                 const matchChanged = data.currentMatch.timestamp !== lastMatchTimestamp;
-                
+
                 blueTeam = data.currentMatch.blueTeam;
                 redTeam = data.currentMatch.redTeam;
                 updateTeamsUI();
+
+                const roleAnnouncement = document.getElementById('roleAnnouncement');
+                if (data.currentMatch.currentRole) {
+                    document.getElementById('announcedRole').textContent = data.currentMatch.currentRole;
+                    if (roleAnnouncement) roleAnnouncement.classList.remove('hidden');
+                } else {
+                    if (roleAnnouncement) roleAnnouncement.classList.add('hidden');
+                }
 
                 if (matchChanged) {
                     lastMatchTimestamp = data.currentMatch.timestamp;
@@ -296,7 +324,7 @@ function startRoomListener(roomId) {
             updateHistory();
             updateTournamentProgress();
             updateModeUI(); // Sincronizar botones de modo
-            
+
             if (document.getElementById('mainContent').classList.contains('hidden')) {
                 document.getElementById('mainContent').classList.remove('hidden');
             }
@@ -317,20 +345,34 @@ function updateModeUI() {
     if (btnAram) btnAram.classList.toggle('active', gameMode === 'aram');
     if (btnGrieta) btnGrieta.classList.toggle('active', gameMode === 'grieta');
 
-    // Visibilidad de switches según el modo
+    // Visibilidad de switches según el rol (Admin vs Lector)
     const aramSwitch = document.getElementById('aramRoleSwitch');
     const grietaSwitch = document.getElementById('grietaDraftSwitch');
     const captainsSection = document.getElementById('grietaCaptainsSection');
-    
-    if (aramSwitch) aramSwitch.classList.toggle('hidden', gameMode !== 'aram');
-    if (grietaSwitch) grietaSwitch.classList.toggle('hidden', gameMode !== 'grieta');
-    if (captainsSection) captainsSection.classList.toggle('hidden', gameMode !== 'grieta');
+
+    if (isAdmin) {
+        // Admin: ve los switches según el modo de juego
+        if (aramSwitch) aramSwitch.classList.toggle('hidden', gameMode !== 'aram');
+        if (grietaSwitch) grietaSwitch.classList.toggle('hidden', gameMode !== 'grieta');
+        if (captainsSection) captainsSection.classList.toggle('hidden', gameMode !== 'grieta');
+    } else {
+        // Lector: SOLO ve los switches si están activos Y corresponden al modo de juego
+        if (aramSwitch) aramSwitch.classList.toggle('hidden', gameMode !== 'aram' || !aramRoleSelector);
+        if (grietaSwitch) grietaSwitch.classList.toggle('hidden', gameMode !== 'grieta' || !grietaDraft);
+        if (captainsSection) captainsSection.classList.toggle('hidden', gameMode !== 'grieta' || !captainsMode);
+    }
+
+    // Interfaz de selección de capitanes (selectores de capitanes)
+    const captainsSelectUI = document.getElementById('captainsSelection');
+    if (captainsSelectUI) {
+        captainsSelectUI.classList.toggle('hidden', !captainsMode || draftActive);
+    }
 
     // Deshabilitar controles si no es admin
     const gameModeSelector = document.getElementById('gameModeSelector');
     const modeSelector = document.getElementById('modeSelector');
     const toggles = ['captainsModeToggle', 'aramRoleSelectorToggle', 'grietaDraftToggle'];
-    
+
     if (gameModeSelector) gameModeSelector.classList.toggle('readonly-control', !isAdmin);
     if (modeSelector) modeSelector.classList.toggle('readonly-control', !isAdmin);
     toggles.forEach(id => {
@@ -338,29 +380,22 @@ function updateModeUI() {
         if (el) el.disabled = !isAdmin;
     });
 
-    // Actualizar Resumen de Modalidad
-    const summary = document.getElementById('modalitySummary');
-    if (summary) {
-        const gmText = gameMode === 'aram' ? 'ARAM' : 'GRIETA';
-        const capText = captainsMode ? ' | CAPITANES' : '';
-        summary.textContent = `${gmText} ${mode}V${mode}${capText}`;
-    }
 }
 
 function triggerRevealFanfare() {
     const overlay = document.getElementById('revealOverlay');
     const text = document.getElementById('revealText');
     const teamsSection = document.getElementById('teamsSection');
-    
+
     // Ocultar equipos inicialmente
     teamsSection.classList.add('hidden');
     teamsSection.classList.remove('reveal-teams-anim');
-    
+
     overlay.classList.remove('hidden');
-    
-    const messages = ["¡PREPARANDO BATALLA!", "¡EQUIPOS LISTOS!", "¡A LA ARENA!"];
+
+    const messages = ["¡PREPAREN EL ANASTASIO!", "¡SIN LLOROS POR LOS EQUIPOS!", "¡ATRAPAR LA MOSCA!"];
     let i = 0;
-    
+
     const interval = setInterval(() => {
         i++;
         if (i < messages.length) {
@@ -374,6 +409,11 @@ function triggerRevealFanfare() {
         overlay.classList.add('hidden');
         teamsSection.classList.remove('hidden');
         teamsSection.classList.add('reveal-teams-anim');
+
+        // Scroll automático hacia los equipos
+        setTimeout(() => {
+            teamsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
     }, 2800);
 }
 
@@ -469,31 +509,33 @@ window.editPlayerName = (oldNick) => {
     if (!isAdmin) return;
     showAlert('✎ EDITAR NICK', 'Ingresa el nuevo nombre:', [
         { text: 'CANCELAR', action: null },
-        { text: 'GUARDAR', action: () => {
-            const newNick = document.getElementById('alertInput').value.trim().toUpperCase();
-            if (!newNick || newNick === oldNick) return;
-            if (allPlayers[newNick]) {
-                showAlert('⚠️ ERROR', 'Ese nick ya existe.');
-                return;
+        {
+            text: 'GUARDAR', action: () => {
+                const newNick = document.getElementById('alertInput').value.trim().toUpperCase();
+                if (!newNick || newNick === oldNick) return;
+                if (allPlayers[newNick]) {
+                    showAlert('⚠️ ERROR', 'Ese nick ya existe.');
+                    return;
+                }
+
+                // 1. Mover en allPlayers
+                allPlayers[newNick] = true;
+                delete allPlayers[oldNick];
+
+                // 2. Actualizar en lobby (selectedPlayers)
+                selectedPlayers = selectedPlayers.map(p => p === oldNick ? newNick : p);
+
+                // 3. Actualizar en liga (tournamentPlayers)
+                if (tournamentPlayers[oldNick]) {
+                    tournamentPlayers[newNick] = { ...tournamentPlayers[oldNick] };
+                    delete tournamentPlayers[oldNick];
+                }
+
+                saveToFirebase(false);
+                renderAllPlayers();
+                renderPlayerPool();
             }
-            
-            // 1. Mover en allPlayers
-            allPlayers[newNick] = true;
-            delete allPlayers[oldNick];
-
-            // 2. Actualizar en lobby (selectedPlayers)
-            selectedPlayers = selectedPlayers.map(p => p === oldNick ? newNick : p);
-
-            // 3. Actualizar en liga (tournamentPlayers)
-            if (tournamentPlayers[oldNick]) {
-                tournamentPlayers[newNick] = { ...tournamentPlayers[oldNick] };
-                delete tournamentPlayers[oldNick];
-            }
-
-            saveToFirebase(false);
-            renderAllPlayers();
-            renderPlayerPool();
-        }}
+        }
     ], true, oldNick);
 };
 
@@ -519,7 +561,7 @@ function renderAllPlayers() {
     // Obtener el término de búsqueda
     const searchInput = document.getElementById('searchSaved');
     const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
-    
+
     // Filtrar y ordenar nicks
     const sortedNicks = Object.keys(allPlayers)
         .filter(nick => nick.toLowerCase().includes(searchTerm))
@@ -559,10 +601,10 @@ window.toggleCardMenu = (event, menuId) => {
             m.closest('.player-card')?.classList.remove('menu-open');
         }
     });
-    
+
     const menu = document.getElementById(menuId);
     const card = event.target.closest('.player-card');
-    
+
     if (menu && card) {
         const isOpening = !menu.classList.contains('show');
         menu.classList.toggle('show');
@@ -585,9 +627,9 @@ function renderPlayerPool() {
 
     const searchInput = document.getElementById('searchLobby');
     const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
-    
+
     counter.textContent = `(${selectedPlayers.length}/${mode * 2})`;
-    
+
     // Alerta visual si sobran jugadores
     if (selectedPlayers.length > mode * 2) {
         counter.style.color = '#ff4d4d';
@@ -599,6 +641,8 @@ function renderPlayerPool() {
 
     // Filtrar jugadores seleccionados
     const filteredPool = selectedPlayers.filter(nick => nick.toLowerCase().includes(searchTerm));
+
+    if (captainsMode) updateCaptainSelects();
 
     if (filteredPool.length === 0) {
         container.innerHTML = `<div style="color: rgba(255,255,255,0.2); width: 100%; text-align: center; padding: 15px;">
@@ -626,8 +670,25 @@ function generateTeams() {
     }
 
     const shuffled = [...selectedPlayers].sort(() => Math.random() - 0.5);
-    blueTeam = shuffled.slice(0, mode);
-    redTeam = shuffled.slice(mode, mode * 2);
+    
+    if (gameMode === 'grieta' && grietaDraft) {
+        const blueRoles = [...ROLES].sort(() => Math.random() - 0.5);
+        const redRoles = [...ROLES].sort(() => Math.random() - 0.5);
+        blueTeam = shuffled.slice(0, mode).map((nick, i) => ({ nick, role: blueRoles[i] || 'COMODÍN' }));
+        redTeam = shuffled.slice(mode, mode * 2).map((nick, i) => ({ nick, role: redRoles[i] || 'COMODÍN' }));
+        
+        blueTeam.sort((a, b) => ROLES.indexOf(a.role) - ROLES.indexOf(b.role));
+        redTeam.sort((a, b) => ROLES.indexOf(a.role) - ROLES.indexOf(b.role));
+    } else {
+        blueTeam = shuffled.slice(0, mode);
+        redTeam = shuffled.slice(mode, mode * 2);
+    }
+
+    if (gameMode === 'aram' && aramRoleSelector) {
+        currentRole = ROLES[Math.floor(Math.random() * ROLES.length)];
+    } else {
+        currentRole = null;
+    }
 
     updateTeamsUI();
     document.getElementById('teamsSection').classList.remove('hidden');
@@ -636,65 +697,208 @@ function generateTeams() {
 
 async function saveTeamsToFirebase() {
     if (!isAdmin) return;
+    const matchData = {
+        blueTeam,
+        redTeam,
+        gameMode,
+        timestamp: new Date().toISOString()
+    };
+    if (currentRole) {
+        matchData.currentRole = currentRole;
+    }
     await updateDoc(doc(db, "rooms", currentRoomId), {
-        currentMatch: {
-            blueTeam,
-            redTeam,
-            gameMode,
-            timestamp: new Date().toISOString()
-        }
+        currentMatch: matchData,
+        draftActive: false,
+        currentDraft: null
     });
 }
 
 function updateTeamsUI() {
-    document.getElementById('blueTeam').innerHTML = blueTeam.map(p => `<li>⚔️ ${p}</li>`).join('');
-    document.getElementById('redTeam').innerHTML = redTeam.map(p => `<li>⚔️ ${p}</li>`).join('');
+    const renderPlayer = (p) => {
+        if (typeof p === 'object' && p !== null) {
+            return `<li>⚔️ ${p.nick} <span style="color: #ff00ff; font-size: 0.85em; margin-left: 8px;">[${p.role}]</span></li>`;
+        }
+        return `<li>⚔️ ${p}</li>`;
+    };
+    document.getElementById('blueTeam').innerHTML = blueTeam.map(renderPlayer).join('');
+    document.getElementById('redTeam').innerHTML = redTeam.map(renderPlayer).join('');
 }
 
-async function declareWinner(team) {
+window.declareWinner = async (team) => {
     if (!isAdmin) return;
-    const winners = team === 'blue' ? blueTeam : redTeam;
-    const losers = team === 'blue' ? redTeam : blueTeam;
-
-    winners.forEach(p => {
-        if (!tournamentPlayers[p]) tournamentPlayers[p] = { points: 0, matches: 0 };
-        tournamentPlayers[p].points++;
-        tournamentPlayers[p].matches++;
-    });
-    losers.forEach(p => {
-        if (!tournamentPlayers[p]) tournamentPlayers[p] = { points: 0, matches: 0 };
-        tournamentPlayers[p].matches++;
-    });
-    totalMatchesPlayed++;
-
-    await saveToFirebase(true);
-    await updateDoc(doc(db, "rooms", currentRoomId), { currentMatch: null });
     
-    blueTeam = [];
-    redTeam = [];
-    document.getElementById('teamsSection').classList.add('hidden');
-    showAlert('🏆 VICTORIA', `¡El equipo ${team === 'blue' ? 'AZUL' : 'ROJO'} ha ganado!`);
+    showAlert('🤡 VOTACIÓN DE LVP', '¿Deseas votar por el Peor Jugador (LVP) de esta partida?', [
+        { text: 'NO, GUARDAR DIRECTO', action: () => processMatchResult(team, null) },
+        { text: 'SÍ, VOTAR LVP', action: () => promptLVP(team) }
+    ]);
+};
+
+window.promptLVP = async (team) => {
+    const sessionId = Date.now().toString();
+    await updateDoc(doc(db, "rooms", currentRoomId), { 
+        lvpVotingActive: true,
+        lvpTeam: team,
+        lvpSessionId: sessionId,
+        lvpVotes: {}
+    });
+};
+
+function renderLvpLiveModal() {
+    let modal = document.getElementById('lvpLiveModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'lvpLiveModal';
+        modal.className = 'custom-alert show';
+        document.body.appendChild(modal);
+    }
+    
+    const allMatchPlayers = [...blueTeam, ...redTeam];
+    
+    const sortedPlayers = allMatchPlayers.map(p => typeof p === 'object' && p !== null ? p.nick : p)
+        .sort((a, b) => {
+            const votesA = currentLvpVotes[a] || 0;
+            const votesB = currentLvpVotes[b] || 0;
+            return votesB - votesA;
+        });
+    
+    const listHtml = sortedPlayers.map(nick => {
+        const votes = currentLvpVotes[nick] || 0;
+        return `
+            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px 15px; margin-bottom: 5px; border-radius: 5px;">
+                <span style="font-size: 1.1rem; color: #fff;">${nick}</span>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <span style="color: #ff00ff; font-weight: bold;">${votes} votos</span>
+                    <button class="btn btn-primary" style="padding: 5px 10px; font-size: 0.9rem;" onclick="submitLiveVote('${nick}')">VOTAR</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    modal.innerHTML = `
+        <div class="custom-alert-box" style="max-width: 500px; width: 90%;">
+            <h3>🤡 VOTACIÓN EN VIVO LVP</h3>
+            <p style="margin-bottom: 15px;">¡Vota por el peor jugador de la partida!</p>
+            <div style="max-height: 250px; overflow-y: auto; text-align: left;">
+                ${listHtml}
+            </div>
+            ${isAdmin ? `
+            <div class="custom-alert-buttons" style="margin-top: 20px;">
+                <button class="btn" style="background: #333; color: white;" onclick="cancelLvpVoting()">CANCELAR</button>
+                <button class="btn btn-success" onclick="closeLvpVotingAndSave()">CERRAR Y GUARDAR</button>
+            </div>
+            ` : `
+            <div style="margin-top: 20px; font-size: 0.9rem; color: #888;">
+                Esperando a que el administrador cierre la votación...
+            </div>
+            `}
+        </div>
+    `;
+}
+
+window.submitLiveVote = async (nick) => {
+    if (!currentLvpSessionId) return;
+    const storageKey = `voted_lvp_${currentRoomId}_${currentLvpSessionId}`;
+    if (localStorage.getItem(storageKey)) {
+        return showAlert('⚠️ YA VOTASTE', 'Solo se permite un voto por persona en esta partida.');
+    }
+    
+    try {
+        await updateDoc(doc(db, "rooms", currentRoomId), {
+            [`lvpVotes.${nick}`]: increment(1)
+        });
+        localStorage.setItem(storageKey, 'true');
+    } catch (error) {
+        console.error("Error voting:", error);
+        showAlert('❌ ERROR', 'No se pudo guardar el voto. Posible falta de permisos en Firestore.');
+    }
+};
+
+window.cancelLvpVoting = async () => {
+    if (!isAdmin) return;
+    await updateDoc(doc(db, "rooms", currentRoomId), { lvpVotingActive: false });
+};
+
+window.closeLvpVotingAndSave = () => {
+    if (!isAdmin) return;
+    let maxVotes = 0;
+    let lvpPlayer = null;
+    
+    for (const [nick, votes] of Object.entries(currentLvpVotes)) {
+        if (votes > maxVotes) {
+            maxVotes = votes;
+            lvpPlayer = nick;
+        }
+    }
+    
+    processMatchResult(currentLvpTeam, lvpPlayer);
+};
+
+async function processMatchResult(team, lvpPlayer) {
+    showLoading(true);
+    try {
+        const winners = team === 'blue' ? blueTeam : redTeam;
+        const losers = team === 'blue' ? redTeam : blueTeam;
+
+        winners.forEach(p => {
+            const nick = typeof p === 'object' && p !== null ? p.nick : p;
+            if (!tournamentPlayers[nick]) tournamentPlayers[nick] = { points: 0, matches: 0, lvp: 0 };
+            tournamentPlayers[nick].points++;
+            tournamentPlayers[nick].matches++;
+        });
+        losers.forEach(p => {
+            const nick = typeof p === 'object' && p !== null ? p.nick : p;
+            if (!tournamentPlayers[nick]) tournamentPlayers[nick] = { points: 0, matches: 0, lvp: 0 };
+            tournamentPlayers[nick].matches++;
+        });
+        
+        if (lvpPlayer) {
+            if (!tournamentPlayers[lvpPlayer]) tournamentPlayers[lvpPlayer] = { points: 0, matches: 0, lvp: 0 };
+            tournamentPlayers[lvpPlayer].lvp = (tournamentPlayers[lvpPlayer].lvp || 0) + 1;
+        }
+        
+        totalMatchesPlayed++;
+
+        await saveToFirebase(false);
+        await updateDoc(doc(db, "rooms", currentRoomId), { currentMatch: null, lvpVotingActive: false });
+
+        blueTeam = [];
+        redTeam = [];
+        document.getElementById('teamsSection').classList.add('hidden');
+        
+        if (lvpPlayer) {
+            showAlert('🤡 RESULTADO GUARDADO', `¡El equipo ${team === 'blue' ? 'AZUL' : 'ROJO'} ganó!\n\nSe sumó 1 punto de LVP a ${lvpPlayer}.`);
+        } else {
+            showAlert('🏆 VICTORIA', `¡El equipo ${team === 'blue' ? 'AZUL' : 'ROJO'} ha ganado!`);
+        }
+    } catch(err) {
+        console.error(err);
+        showAlert("❌ ERROR", "Error al guardar el resultado.");
+    } finally {
+        showLoading(false);
+    }
 }
 
 async function cancelMatch() {
     if (!isAdmin) return;
-    
+
     showAlert('⚠️ CANCELAR PARTIDA', '¿Estás seguro de que quieres cancelar esta partida? No se guardarán resultados.', [
         { text: 'NO, VOLVER', action: null },
-        { text: 'SÍ, CANCELAR', danger: true, action: async () => {
-            showLoading(true);
-            try {
-                await updateDoc(doc(db, "rooms", currentRoomId), { currentMatch: null });
-                blueTeam = [];
-                redTeam = [];
-                document.getElementById('teamsSection').classList.add('hidden');
-            } catch (error) {
-                console.error("Error al cancelar:", error);
-                showAlert("❌ ERROR", "No se pudo cancelar la partida.");
-            } finally {
-                showLoading(false);
+        {
+            text: 'SÍ, CANCELAR', danger: true, action: async () => {
+                showLoading(true);
+                try {
+                    await updateDoc(doc(db, "rooms", currentRoomId), { currentMatch: null });
+                    blueTeam = [];
+                    redTeam = [];
+                    document.getElementById('teamsSection').classList.add('hidden');
+                } catch (error) {
+                    console.error("Error al cancelar:", error);
+                    showAlert("❌ ERROR", "No se pudo cancelar la partida.");
+                } finally {
+                    showLoading(false);
+                }
             }
-        }}
+        }
     ]);
 }
 
@@ -702,7 +906,7 @@ function updateLeaderboard() {
     const tbody = document.getElementById('leaderboardBody');
     const sorted = Object.entries(tournamentPlayers).sort((a, b) => b[1].points - a[1].points || b[1].matches - a[1].matches);
     if (sorted.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: rgba(255,255,255,0.3);">Sin jugadores en la liga</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: rgba(255,255,255,0.3);">Sin jugadores en la liga</td></tr>';
         return;
     }
     tbody.innerHTML = sorted.map(([nick, stats], i) => `<tr>
@@ -710,6 +914,7 @@ function updateLeaderboard() {
         <td>${nick}</td>
         <td>${stats.points}</td>
         <td>${stats.matches}</td>
+        <td>${stats.lvp || 0}</td>
     </tr>`).join('');
 }
 
@@ -759,7 +964,7 @@ async function resetTournament() {
 window.showAlert = (title, message, buttons = [{ text: 'OK', action: null }], hasInput = false, defaultValue = '') => {
     document.getElementById('alertTitle').textContent = title;
     const msgEl = document.getElementById('alertMessage');
-    
+
     if (hasInput) {
         msgEl.innerHTML = `
             <div style="margin-bottom: 10px;">${message}</div>
@@ -767,7 +972,7 @@ window.showAlert = (title, message, buttons = [{ text: 'OK', action: null }], ha
         `;
         setTimeout(() => document.getElementById('alertInput').focus(), 100);
     } else {
-        msgEl.textContent = message;
+        msgEl.innerHTML = message;
     }
 
     const btnContainer = document.getElementById('alertButtons');
@@ -777,12 +982,14 @@ window.showAlert = (title, message, buttons = [{ text: 'OK', action: null }], ha
         button.className = `btn ${b.danger ? 'btn-danger' : ''}`;
         button.textContent = b.text;
         button.onclick = () => {
-            if (b.action) b.action();
             closeAlert();
+            if (b.action) setTimeout(b.action, 50);
         };
         btnContainer.appendChild(button);
     });
+    document.getElementById('alertOverlay').style.zIndex = '99998';
     document.getElementById('alertOverlay').classList.add('show');
+    document.getElementById('customAlert').style.zIndex = '99999';
     document.getElementById('customAlert').classList.add('show');
 };
 
@@ -846,10 +1053,20 @@ window.toggleCaptainsMode = () => {
 function updateCaptainSelects() {
     const blueSelect = document.getElementById('blueCaptainSelect');
     const redSelect = document.getElementById('redCaptainSelect');
+    
+    if (!blueSelect || !redSelect) return;
+
+    const currentBlue = blueSelect.value;
+    const currentRed = redSelect.value;
+
     const options = selectedPlayers.map(p => `<option value="${p}">${p}</option>`).join('');
     const placeholder = '<option value="">Seleccionar...</option>';
+    
     blueSelect.innerHTML = placeholder + options;
     redSelect.innerHTML = placeholder + options;
+
+    if (selectedPlayers.includes(currentBlue)) blueSelect.value = currentBlue;
+    if (selectedPlayers.includes(currentRed)) redSelect.value = currentRed;
 }
 
 window.selectCaptain = (side) => {
@@ -866,7 +1083,7 @@ window.startCaptainSelection = () => {
     availableForCaptains = selectedPlayers.filter(p => p !== captains.blue && p !== captains.red);
     currentTurn = 'blue';
     draftActive = true;
-    
+
     document.getElementById('captainOverlay').classList.add('show');
     document.getElementById('captainInterface').classList.remove('hidden');
     renderCaptainInterface();
@@ -892,7 +1109,7 @@ function renderCaptainInterface() {
     const redList = document.getElementById('redCaptainTeam');
     if (blueList) blueList.innerHTML = blueTeam.map((p, i) => `<li>${p}${i === 0 ? ' <span class="captain-badge">CAP</span>' : ''}</li>`).join('');
     if (redList) redList.innerHTML = redTeam.map((p, i) => `<li>${p}${i === 0 ? ' <span class="captain-badge">CAP</span>' : ''}</li>`).join('');
-    
+
     const finishBtn = document.getElementById('finishSelectionBtn');
     if (finishBtn) finishBtn.classList.toggle('hidden', availableForCaptains.length > 0 || !isAdmin);
 }
@@ -916,6 +1133,17 @@ window.finishCaptainSelection = () => {
     draftActive = false;
     document.getElementById('captainOverlay').classList.remove('show');
     document.getElementById('captainInterface').classList.add('hidden');
+    
+    if (gameMode === 'grieta' && grietaDraft) {
+        const blueRoles = [...ROLES].sort(() => Math.random() - 0.5);
+        const redRoles = [...ROLES].sort(() => Math.random() - 0.5);
+        blueTeam = blueTeam.map((nick, i) => ({ nick, role: blueRoles[i] || 'COMODÍN' }));
+        redTeam = redTeam.map((nick, i) => ({ nick, role: redRoles[i] || 'COMODÍN' }));
+
+        blueTeam.sort((a, b) => ROLES.indexOf(a.role) - ROLES.indexOf(b.role));
+        redTeam.sort((a, b) => ROLES.indexOf(a.role) - ROLES.indexOf(b.role));
+    }
+
     updateTeamsUI();
     document.getElementById('teamsSection').classList.remove('hidden');
     saveTeamsToFirebase(); // Esto guarda el currentMatch y pone draftActive: false

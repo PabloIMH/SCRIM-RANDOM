@@ -76,11 +76,6 @@
     </div>
 
     <div class="container">
-        <header>
-            <h1>⚔️ SCRIMS ANTIVENEKOS ⚔️</h1>
-            <div class="subtitle">SISTEMA PARA TROLLS</div>
-            <div class="tournament-progress" id="tournamentProgressLanding">Sin torneo activo</div>
-        </header>
 
         <!-- PANTALLA DE INICIO (LANDING PAGE) -->
         <div id="landingPage" class="landing-page">
@@ -152,7 +147,6 @@
                 </div>
                 <h1>⚔️ SCRIMS ANTIVENEKOS ⚔️</h1>
                 <div class="subtitle" id="roomTitle">SISTEMA PARA TROLLS</div>
-                <div class="modality-summary not-admin-only" id="modalitySummary">GRIETA DEL INVOCADOR 5V5</div>
                 <div class="tournament-progress" id="roomTournamentProgress">Sin torneo activo</div>
             </header>
 
@@ -172,7 +166,7 @@
                         <h2 class="card-title">🎮 LOBBY</h2>
 
                         <!-- Agregar nuevo jugador (Solo visible para Admin) -->
-                        <div class="input-group admin-only">
+                        <div class="add-player-group admin-only">
                             <input type="text" id="playerInput" placeholder="Agregar nuevo jugador...">
                             <button class="btn btn-small" onclick="addNewPlayer()">+ GUARDAR</button>
                         </div>
@@ -247,19 +241,6 @@
                             </div>
                         </div>
 
-                        <div class="admin-only">
-                            <div class="section-header">
-                                <h3 class="section-title">👥 JUGADORES GUARDADOS</h3>
-                                <div class="search-wrapper">
-                                    <span class="search-icon">🔍</span>
-                                    <input type="text" id="searchSaved" placeholder="Buscar..." oninput="renderAllPlayers()">
-                                </div>
-                            </div>
-                            <div class="all-players" id="allPlayers">
-                                <!-- Saved players will appear here -->
-                            </div>
-                        </div>
-
                         <div class="section-header" style="margin-top: 30px;">
                             <h3 class="section-title">
                                 ⚔️ LOBBY ACTUAL <span id="lobbyCounter" style="font-size: 0.9rem; color: #00ffff; margin-left: 10px;"></span>
@@ -275,6 +256,19 @@
                             </div>
                         </div>
 
+                        <div class="admin-only">
+                            <div class="section-header" style="margin-top: 20px;">
+                                <h3 class="section-title">👥 JUGADORES GUARDADOS</h3>
+                                <div class="search-wrapper">
+                                    <span class="search-icon">🔍</span>
+                                    <input type="text" id="searchSaved" placeholder="Buscar..." oninput="renderAllPlayers()">
+                                </div>
+                            </div>
+                            <div class="all-players" id="allPlayers">
+                                <!-- Saved players will appear here -->
+                            </div>
+                        </div>
+
                         <button class="btn admin-only" style="width: 100%; margin-top: 20px;" onclick="generateTeams()">
                             🎲 GENERAR EQUIPOS
                         </button>
@@ -287,24 +281,26 @@
 
                     <div class="card">
                         <h2 class="card-title">🏆 LIGA </h2>
-                        <table class="leaderboard-table">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>JUGADOR</th>
-                                    <th>🏆 VICTORIAS</th>
-                                    <th>🎮 PARTIDAS</th>
-                                </tr>
-                            </thead>
-                            <tbody id="leaderboardBody">
-                                <tr>
-                                    <td colspan="4" style="text-align: center; color: rgba(255,255,255,0.3);">Sin
-                                        jugadores
-                                        en
-                                        la liga</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <div class="table-responsive">
+                            <table class="leaderboard-table">
+                                <thead>
+                                        <th>#</th>
+                                        <th>JUGADOR</th>
+                                        <th>🏆 VICTORIAS</th>
+                                        <th>🎮 PARTIDAS</th>
+                                        <th>🤡 LVP</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="leaderboardBody">
+                                    <tr>
+                                        <td colspan="5" style="text-align: center; color: rgba(255,255,255,0.3);">Sin
+                                            jugadores
+                                            en
+                                            la liga</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -347,24 +343,26 @@
                 <!-- Historial de Torneos -->
                 <div class="card history-section">
                     <h2 class="card-title">📜 HISTORIAL DE TORNEOS</h2>
-                    <table class="history-table">
-                        <thead>
-                            <tr>
-                                <th>FECHA</th>
-                                <th>MODO</th>
-                                <th>🥇 PRIMERO</th>
-                                <th>🥈 SEGUNDO</th>
-                                <th>🥉 TERCERO</th>
-                                <th>PARTIDAS</th>
-                            </tr>
-                        </thead>
-                        <tbody id="historyBody">
-                            <tr>
-                                <td colspan="6" style="text-align: center; color: rgba(255,255,255,0.3);">Sin torneos
-                                    registrados</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <div class="table-responsive">
+                        <table class="history-table">
+                            <thead>
+                                <tr>
+                                    <th>FECHA</th>
+                                    <th>MODO</th>
+                                    <th>🥇 PRIMERO</th>
+                                    <th>🥈 SEGUNDO</th>
+                                    <th>🥉 TERCERO</th>
+                                    <th>PARTIDAS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyBody">
+                                <tr>
+                                    <td colspan="6" style="text-align: center; color: rgba(255,255,255,0.3);">Sin torneos
+                                        registrados</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
