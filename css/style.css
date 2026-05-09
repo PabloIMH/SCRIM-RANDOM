@@ -1763,6 +1763,28 @@ input:checked+.slider:before {
     z-index: 10000;
 }
 
+/* Modificador para tooltips en el borde derecho y superior */
+.help-icon.tooltip-left::after {
+    left: auto;
+    right: -10px;
+    bottom: auto;
+    top: 125%;
+    transform: translateY(-10px);
+}
+
+.help-icon.tooltip-left:hover::after {
+    transform: translateY(0);
+}
+
+.help-icon.tooltip-left::before {
+    left: auto;
+    right: -2px;
+    bottom: auto;
+    top: 105%;
+    border-color: transparent transparent #00ffff transparent;
+    transform: none;
+}
+
 .help-icon:hover::before {
     opacity: 1;
     visibility: visible;
