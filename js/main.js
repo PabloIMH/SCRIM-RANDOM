@@ -727,9 +727,9 @@ function updateTeamsUI() {
 window.declareWinner = async (team) => {
     if (!isAdmin) return;
     
-    showAlert('🤡 VOTACIÓN DE LVP', '¿Deseas votar por el Peor Jugador (LVP) de esta partida?', [
+    showAlert('🤡 VOTACIÓN DE JMM', '¿Deseas votar por el Jugador Más Manco (JMM) de esta partida?', [
         { text: 'NO, GUARDAR DIRECTO', action: () => processMatchResult(team, null) },
-        { text: 'SÍ, VOTAR LVP', action: () => promptLVP(team) }
+        { text: 'SÍ, VOTAR JMM', action: () => promptLVP(team) }
     ]);
 };
 
@@ -776,8 +776,8 @@ function renderLvpLiveModal() {
 
     modal.innerHTML = `
         <div class="custom-alert-box" style="max-width: 500px; width: 90%;">
-            <h3>🤡 VOTACIÓN EN VIVO LVP</h3>
-            <p style="margin-bottom: 15px;">¡Vota por el peor jugador de la partida!</p>
+            <h3>🤡 VOTACIÓN EN VIVO JMM</h3>
+            <p style="margin-bottom: 15px;">¡Vota por el jugador más manco de la partida!</p>
             <div style="max-height: 250px; overflow-y: auto; text-align: left;">
                 ${listHtml}
             </div>
@@ -866,7 +866,7 @@ async function processMatchResult(team, lvpPlayer) {
         document.getElementById('teamsSection').classList.add('hidden');
         
         if (lvpPlayer) {
-            showAlert('🤡 RESULTADO GUARDADO', `¡El equipo ${team === 'blue' ? 'AZUL' : 'ROJO'} ganó!\n\nSe sumó 1 punto de LVP a ${lvpPlayer}.`);
+            showAlert('🤡 RESULTADO GUARDADO', `¡El equipo ${team === 'blue' ? 'AZUL' : 'ROJO'} ganó!\n\nSe sumó 1 punto de JMM a ${lvpPlayer}.`);
         } else {
             showAlert('🏆 VICTORIA', `¡El equipo ${team === 'blue' ? 'AZUL' : 'ROJO'} ha ganado!`);
         }
