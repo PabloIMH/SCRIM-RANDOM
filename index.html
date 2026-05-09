@@ -16,7 +16,7 @@
     <div id="loadingOverlay" class="loading-overlay hidden">
         <div class="loading-icon">🪰</div>
         <div class="loading-spinner"></div>
-        <div class="loading-title">Guardando datos</div>
+        <div class="loading-title" id="loadingTitle">Guardando datos</div>
         <div class="loading-message" id="loadingMessage">
             Esto puede tomar un momento...
         </div>
@@ -165,10 +165,17 @@
                     <div class="card">
                         <h2 class="card-title">🎮 LOBBY</h2>
 
-                        <!-- Agregar nuevo jugador (Solo visible para Admin) -->
-                        <div class="add-player-group admin-only">
-                            <input type="text" id="playerInput" placeholder="Agregar nuevo jugador...">
-                            <button class="btn btn-small" onclick="addNewPlayer()">+ GUARDAR</button>
+                        <!-- Agregar nuevo jugador / Sugerir -->
+                        <div class="add-player-group">
+                            <input type="text" id="playerInput" placeholder="Agregar o sugerir jugador...">
+                            <button class="btn btn-small" id="btnAddPlayer" onclick="addNewPlayer()">+ GUARDAR</button>
+                        </div>
+
+                        <!-- Lista de sugerencias (Solo visible para Admin) -->
+                        <div class="admin-only">
+                            <div class="suggested-players-container" id="suggestedPlayersContainer">
+                                <!-- Las sugerencias aparecerán aquí -->
+                            </div>
                         </div>
 
                         <!-- Selector de modo (Visible para todos, pero solo admin edita) -->

@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, where, getDocs, limit, increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, where, getDocs, limit, increment, deleteField } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -18,6 +18,7 @@ const auth = getAuth(app);
 
 // Variables de Estado Global
 let allPlayers = {};
+let suggestedPlayers = {};
 let tournamentPlayers = {};
 let selectedPlayers = [];
 let mode = 3;
@@ -218,6 +219,7 @@ function startRoomListener(roomId) {
         if (docSnap.exists()) {
             const data = docSnap.data();
             allPlayers = data.allPlayers || {};
+            suggestedPlayers = data.suggestedPlayers || {};
             tournamentPlayers = data.tournamentPlayers || {};
             tournamentHistory = data.tournamentHistory || [];
             totalMatchesPlayed = data.totalMatchesPlayed || 0;
@@ -320,6 +322,7 @@ function startRoomListener(roomId) {
 
             renderAllPlayers();
             renderPlayerPool();
+            renderSuggestedPlayers();
             updateLeaderboard();
             updateHistory();
             updateTournamentProgress();
@@ -371,10 +374,16 @@ function updateModeUI() {
     // Deshabilitar controles si no es admin
     const gameModeSelector = document.getElementById('gameModeSelector');
     const modeSelector = document.getElementById('modeSelector');
+    const btnAddPlayer = document.getElementById('btnAddPlayer');
     const toggles = ['captainsModeToggle', 'aramRoleSelectorToggle', 'grietaDraftToggle'];
 
     if (gameModeSelector) gameModeSelector.classList.toggle('readonly-control', !isAdmin);
     if (modeSelector) modeSelector.classList.toggle('readonly-control', !isAdmin);
+    if (btnAddPlayer) btnAddPlayer.textContent = isAdmin ? '+ GUARDAR' : '+ SUGERIR';
+    const playerInput = document.getElementById('playerInput');
+    if (playerInput) {
+        playerInput.placeholder = isAdmin ? 'Agregar jugador...' : 'Sugerir jugador...';
+    }
     toggles.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.disabled = !isAdmin;
@@ -475,18 +484,100 @@ async function saveToFirebase(showLoader = true) {
     }
 }
 
-function addNewPlayer() {
-    if (!isAdmin) return;
+window.addNewPlayer = async () => {
     const input = document.getElementById('playerInput');
     const nick = input.value.trim().toUpperCase();
     if (!nick) return;
     if (allPlayers[nick]) {
-        showAlert('⚠️ JUGADOR EXISTENTE', 'Ese nick ya está en la lista.');
+        showAlert('⚠️ JUGADOR EXISTENTE', 'Ese nick ya está en la lista guardada.');
         return;
     }
-    allPlayers[nick] = true;
-    input.value = '';
-    saveToFirebase(false);
+
+    if (isAdmin) {
+        allPlayers[nick] = true;
+        input.value = '';
+        saveToFirebase(false);
+    } else {
+        if (suggestedPlayers && suggestedPlayers[nick]) {
+            showAlert('⚠️ YA SUGERIDO', 'Este jugador ya ha sido sugerido y está pendiente de revisión.');
+            return;
+        }
+        input.value = '';
+        showLoading(true, "Enviando sugerencia", "Notificando al administrador...");
+        try {
+            await updateDoc(doc(db, "rooms", currentRoomId), {
+                [`suggestedPlayers.${nick}`]: true
+            });
+            showAlert('✅ SUGERENCIA ENVIADA', `Has sugerido a ${nick}. El administrador decidirá si aceptarlo.`);
+        } catch (error) {
+            console.error("Error sugiriendo:", error);
+            showAlert('❌ ERROR', 'No se pudo enviar la sugerencia.');
+        } finally {
+            showLoading(false);
+        }
+    }
+};
+
+window.acceptSuggestion = async (nick) => {
+    if (!isAdmin) return;
+    showLoading(true, "Aceptando jugador", `Agregando a ${nick} a la lista permanente...`);
+    try {
+        allPlayers[nick] = true;
+        await updateDoc(doc(db, "rooms", currentRoomId), {
+            [`suggestedPlayers.${nick}`]: deleteField(),
+            [`allPlayers.${nick}`]: true
+        });
+    } catch (e) {
+        console.error(e);
+        showAlert('❌ ERROR', 'No se pudo aceptar la sugerencia.');
+    } finally {
+        showLoading(false);
+    }
+};
+
+window.rejectSuggestion = async (nick) => {
+    if (!isAdmin) return;
+    showLoading(true, "Rechazando sugerencia", "Eliminando de la lista de espera...");
+    try {
+        await updateDoc(doc(db, "rooms", currentRoomId), {
+            [`suggestedPlayers.${nick}`]: deleteField()
+        });
+    } catch (e) {
+        console.error(e);
+        showAlert('❌ ERROR', 'No se pudo rechazar la sugerencia.');
+    } finally {
+        showLoading(false);
+    }
+};
+
+function renderSuggestedPlayers() {
+    const container = document.getElementById('suggestedPlayersContainer');
+    if (!container) return;
+    
+    if (!isAdmin) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const nicks = Object.keys(suggestedPlayers || {});
+    if (nicks.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = `<div class="section-header" style="margin-top: 15px; margin-bottom: 10px;">
+        <h3 class="section-title" style="color: #ffaa00; font-size: 0.9rem;">🔔 JUGADORES SUGERIDOS</h3>
+    </div>` + 
+    `<div class="suggested-grid" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px;">` + 
+    nicks.map(nick => `
+        <div class="player-tag" style="background: rgba(255, 170, 0, 0.2); border-color: #ffaa00; display: flex; align-items: center; gap: 10px;">
+            <span style="color: #ffcc66;">${nick}</span>
+            <div style="display: flex; gap: 5px;">
+                <button style="background: #28a745; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px;" onclick="window.acceptSuggestion('${nick}')">✓</button>
+                <button style="background: #dc3545; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px;" onclick="window.rejectSuggestion('${nick}')">✕</button>
+            </div>
+        </div>
+    `).join('') + `</div>`;
 }
 
 window.confirmRemovePlayer = (nick) => {
@@ -639,8 +730,8 @@ function renderPlayerPool() {
         counter.style.textShadow = 'none';
     }
 
-    // Filtrar jugadores seleccionados
-    const filteredPool = selectedPlayers.filter(nick => nick.toLowerCase().includes(searchTerm));
+    // Filtrar y ordenar jugadores seleccionados alfabéticamente
+    const filteredPool = selectedPlayers.filter(nick => nick.toLowerCase().includes(searchTerm)).sort();
 
     if (captainsMode) updateCaptainSelects();
 
@@ -653,7 +744,7 @@ function renderPlayerPool() {
 
     container.innerHTML = filteredPool.map(nick => `<div class="player-tag">
         <span>${nick}</span>
-        <span class="remove" onclick="window.togglePlayerSelection('${nick}')">×</span>
+        ${isAdmin ? `<span class="remove" onclick="window.togglePlayerSelection('${nick}')">×</span>` : ''}
     </div>`).join('');
 }
 
@@ -998,7 +1089,11 @@ const closeAlert = () => {
     document.getElementById('customAlert').classList.remove('show');
 };
 
-const showLoading = (show) => {
+const showLoading = (show, title = "Guardando datos", message = "Esto puede tomar un momento...") => {
+    if (show) {
+        document.getElementById('loadingTitle').textContent = title;
+        document.getElementById('loadingMessage').textContent = message;
+    }
     document.getElementById('loadingOverlay').classList.toggle('hidden', !show);
 };
 
